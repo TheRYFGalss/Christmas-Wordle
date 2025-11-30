@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Christmas Wordle</title>
+<style>
+  body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+  #grid { display: grid; gap: 8px; margin-top: 20px; }
+  .cell { width: 40px; height: 40px; border: 2px solid #aaa; display: flex; justify-content: center; align-items: center; font-size: 20px; font-weight: bold; text-transform: uppercase; }
+  .correct { background: #6aaa64; color: white; }
+  .present { background: #c9b458; color: white; }
+  .absent { background: #787c7e; color: white; }
+  #msg { margin-top: 15px; font-size: 24px; font-weight: bold; text-align: center; }
+  #keyboard { display: grid; grid-template-columns: repeat(10, 30px); gap: 5px; justify-content: center; margin-top: 20px; }
+  .key { width: 30px; height: 40px; border: 1px solid #aaa; display: flex; justify-content: center; align-items: center; cursor: pointer; font-weight: bold; text-transform: uppercase; user-select: none; }
+  #controls { margin-top: 20px; display: flex; align-items: center; gap: 10px; }
+  #guessInput { width: 240px; height: 40px; font-size: 20px; text-transform: uppercase; text-align: center; }
+  #enterBtn { padding: 5px 15px; font-size:16px; cursor:pointer; }
+  #shareBtn { margin-top: 20px; display:none; padding: 10px 20px; background-color:#25D366; color:white; border:none; border-radius:5px; cursor:pointer; font-size:16px; }
+</style>
+</head>
+<body>
+<h2>Christmas Wordle</h2>
+
+<div id="grid"></div>
+<div id="msg"></div>
+<div id="keyboard"></div>
+<div id="controls">
+  <input id="guessInput" type="text" maxlength="6" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Enter guess" />
+  <button id="enterBtn">Send</button>
+</div>
+<button id="shareBtn">Share to WhatsApp</button>
+
+<script>
+const todayWord = "Christ";
+const secretWord = todayWord.toLowerCase();
+const maxTries = 6;
+let currentRow = 0;
+let currentCol = 0;
+const alphabet = "abcdefghijklmnopqrstuvwxyz";
+const keyboardKeys = {};
+let gridCells = [];
+let guessWord = Array(secretWord.length).fill('');
+
+// Load English word list
+let validWords = [];
+fetch('https://raw.githubusercontent.com/dwyl/english-words/master/words_dictionary.json')
+  .then(response => response.json())
+  .then(data => { validWords = Object.keys(data); });
+
+// Create grid
+const grid = document.getElementById("grid");
+grid.style.gridTemplateColumns = `repeat(${secretWord.length}, 40px)`;
+for (let r = 0; r < maxTries; r++) {
+  let rowCells = [];
+  for (let c = 0; c < secretWord.length; c++) {
+    let cell = document.createElement("div");
+    cell.className = "cell";
+    cell.id = `cell-${r}-${c}`;
+    grid.appendChild(cell);
+    rowCells.push(cell);
+  }
+  gridCells.push(rowCells);
+}
+
+// Keyboard display
+const keyboardDiv = document.getElementById("keyboard");
+for (let letter of alphabet) {
+  const key = document.createElement("div");
+  key.className = "key";
+  key.id = `key-${letter}`;
+  key.textContent = letter;
+  keyboardDiv.appendChild(key);
+  keyboardKeys[letter] = key;
+  key.addEventListener('click', () => handleLetter(letter));
+}
+
+const guessInput = document.getElementById('guessInput');
+const enterBtn = document.getElementById('enterBtn');
+const shareBtn = document.getElementById("shareBtn");
+
+enterBtn.addEventListener('click', () => {
+  const guess = guessInput.value.trim().toLowerCase();
+  if (guess.length !== secretWord.length) { alert('Word must be ' + secretWord.length + ' letters'); return; }
+  guessInput.value = '';
+  submitGuess(guess);
+});
+
+function handleLetter(letter) {
+  if (currentRow >= maxTries || currentCol >= secretWord.length) return;
+  gridCells[currentRow][currentCol].textContent = letter;
+  guessWord[currentCol] = letter;
+  currentCol++;
+  if (currentCol === secretWord.length) submitGuess(guessWord.join(''));
+}
+
+function handleBackspace() {
+  if (currentCol > 0) {
+    currentCol--;
+    guessWord[currentCol] = '';
+    gridCells[currentRow][currentCol].textContent = '';
+  }
+}
+
+// Keyboard input support
+guessInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Backspace') handleBackspace();
+  else if (e.key === 'Enter') enterBtn.click();
+});
+
+function submitGuess(guess) {
+  // Fill grid cells for typed input
+  for (let i = 0; i < secretWord.length; i++) {
+    gridCells[currentRow][i].textContent = guess[i];
+    guessWord[i] = guess[i];
+  }
+
+  if (!validWords.includes(guess)) { alert("This is not a valid word!"); return; }
+
+  let secretCounts = {};
+  for (let l of secretWord) secretCounts[l] = (secretCounts[l] || 0) + 1;
+
+  for (let i = 0; i < secretWord.length; i++) {
+    const letter = guess[i];
+    if (letter === secretWord[i]) {
+      gridCells[currentRow][i].classList.add("correct");
+      keyboardKeys[letter].className = "key correct";
+      secretCounts[letter]--;
+    }
+  }
+
+  for (let i = 0; i < secretWord.length; i++) {
+    const letter = guess[i];
+    if (!gridCells[currentRow][i].classList.contains("correct")) {
+      if (secretCounts[letter] > 0) {
+        gridCells[currentRow][i].classList.add("present");
+        if (!keyboardKeys[letter].classList.contains("correct")) keyboardKeys[letter].className = "key present";
+        secretCounts[letter]--;
+      } else {
+        gridCells[currentRow][i].classList.add("absent");
+        if (!keyboardKeys[letter].classList.contains("correct") && !keyboardKeys[letter].classList.contains("present")) keyboardKeys[letter].className = "key absent";
+      }
+    }
+  }
+
+  if (guess === secretWord) {
+    document.getElementById("msg").textContent = "You got it! 🎄";
+    document.getElementById("msg").style.fontSize = '32px';
+    shareBtn.style.display = 'block';
+  } else {
+    currentRow++;
+    currentCol = 0;
+    guessWord = Array(secretWord.length).fill('');
+    if (currentRow === maxTries) revealSecretWord();
+  }
+}
+
+function revealSecretWord() {
+  for (let i = 0; i < secretWord.length; i++) {
+    gridCells[currentRow-1][i].textContent = secretWord[i].toUpperCase();
+    gridCells[currentRow-1][i].classList.add("correct");
+  }
+  shareBtn.style.display = 'block';
+}
+
+shareBtn.onclick = () => {
+  let shareText = 'I just completed the Christmas Wordle! 🎄\n';
+  shareText += secretWord.toUpperCase().split('').map(l => '🟩').join('');
+  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+  window.open(whatsappUrl, '_blank');
+};
+</script>
+</body>
+</html>
