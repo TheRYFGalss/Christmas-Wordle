@@ -33,8 +33,12 @@
 <button id="shareBtn">Share to WhatsApp</button>
 
 <script>
-const todayWord = "Belief";
+/* ----- CONFIG ----- */
+const todayWord = "Belief";           // <-- change this to start a new game
 const secretWord = todayWord.toLowerCase();
+const storageKey = 'christmasWordle'; // localStorage key
+
+/* ----- GAME STATE ----- */
 const maxTries = 6;
 let currentRow = 0;
 let currentCol = 0;
@@ -43,13 +47,14 @@ const keyboardKeys = {};
 let gridCells = [];
 let guessWord = Array(secretWord.length).fill('');
 
-// Load English word list
+/* ----- WORD LIST (for validation) ----- */
 let validWords = [];
 fetch('https://raw.githubusercontent.com/dwyl/english-words/master/words_dictionary.json')
   .then(response => response.json())
-  .then(data => { validWords = Object.keys(data); });
+  .then(data => { validWords = Object.keys(data); })
+  .catch(() => { validWords = []; }); // fallback if fetch fails
 
-// Create grid
+/* ----- BUILD GRID ----- */
 const grid = document.getElementById("grid");
 grid.style.gridTemplateColumns = `repeat(${secretWord.length}, 40px)`;
 for (let r = 0; r < maxTries; r++) {
@@ -64,7 +69,7 @@ for (let r = 0; r < maxTries; r++) {
   gridCells.push(rowCells);
 }
 
-// Keyboard display
+/* ----- KEYBOARD (visual) ----- */
 const keyboardDiv = document.getElementById("keyboard");
 for (let letter of alphabet) {
   const key = document.createElement("div");
@@ -73,13 +78,15 @@ for (let letter of alphabet) {
   key.textContent = letter;
   keyboardDiv.appendChild(key);
   keyboardKeys[letter] = key;
-  key.addEventListener('click', () => handleLetter(letter));
+  // intentionally no click handler: visual-only keyboard
 }
 
+/* ----- DOM REFS ----- */
 const guessInput = document.getElementById('guessInput');
 const enterBtn = document.getElementById('enterBtn');
 const shareBtn = document.getElementById("shareBtn");
 
+/* ----- INPUT HANDLERS ----- */
 enterBtn.addEventListener('click', () => {
   const guess = guessInput.value.trim().toLowerCase();
   if (guess.length !== secretWord.length) { alert('Word must be ' + secretWord.length + ' letters'); return; }
@@ -87,90 +94,89 @@ enterBtn.addEventListener('click', () => {
   submitGuess(guess);
 });
 
-function handleLetter(letter) {
-  if (currentRow >= maxTries || currentCol >= secretWord.length) return;
-  gridCells[currentRow][currentCol].textContent = letter;
-  guessWord[currentCol] = letter;
-  currentCol++;
-  if (currentCol === secretWord.length) submitGuess(guessWord.join(''));
-}
-
-function handleBackspace() {
-  if (currentCol > 0) {
-    currentCol--;
-    guessWord[currentCol] = '';
-    gridCells[currentRow][currentCol].textContent = '';
-  }
-}
-
-// Keyboard input support
 guessInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Backspace') handleBackspace();
-  else if (e.key === 'Enter') enterBtn.click();
+  if (e.key === 'Enter') enterBtn.click();
 });
 
-// Save game state
+/* ----- SAVE / LOAD STATE ----- */
 function saveGameState(gameOver=false) {
-  const gridState = gridCells.map(row => 
+  const gridState = gridCells.map(row =>
     row.map(cell => ({
-      letter: cell.textContent,
+      letter: cell.textContent || '',
       class: cell.className.replace('cell','').trim()
     }))
   );
 
   const keyboardState = {};
-  for (let l of alphabet) {
-    const key = keyboardKeys[l];
-    keyboardState[l] = key.className.replace('key','').trim();
-  }
+  for (let l of alphabet) keyboardState[l] = keyboardKeys[l].className.replace('key','').trim();
 
   const state = {
+    secret: secretWord,   // remember which secret this state belongs to
     currentRow,
     currentCol,
     grid: gridState,
     keyboard: keyboardState,
     gameOver
   };
-  localStorage.setItem('christmasWordle', JSON.stringify(state));
+  try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch (e) { /* ignore storage errors */ }
 }
 
-// Load game state
 function loadGameState() {
-  const savedState = JSON.parse(localStorage.getItem('christmasWordle'));
-  if (!savedState) return;
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return;
+    const savedState = JSON.parse(raw);
 
-  currentRow = savedState.currentRow;
-  currentCol = savedState.currentCol;
-  gridCells.forEach((row, r) => {
-    row.forEach((cell, c) => {
-      const cellData = savedState.grid[r]?.[c];
-      if (cellData) {
-        cell.textContent = cellData.letter;
-        if (cellData.class) cell.className = "cell " + cellData.class;
-      }
+    // If the saved state is for a different secret (word changed), discard it.
+    if (!savedState || savedState.secret !== secretWord) {
+      localStorage.removeItem(storageKey);
+      return;
+    }
+
+    // restore indices
+    currentRow = typeof savedState.currentRow === 'number' ? savedState.currentRow : 0;
+    currentCol = typeof savedState.currentCol === 'number' ? savedState.currentCol : 0;
+
+    // restore grid
+    gridCells.forEach((row, r) => {
+      row.forEach((cell, c) => {
+        const cellData = savedState.grid?.[r]?.[c];
+        if (cellData) {
+          cell.textContent = cellData.letter || '';
+          cell.className = "cell" + (cellData.class ? ' ' + cellData.class : '');
+        }
+      });
     });
-  });
 
-  for (let l of alphabet) {
-    const keyClass = savedState.keyboard[l];
-    if (keyClass) keyboardKeys[l].className = 'key ' + keyClass;
+    // restore keyboard classes
+    for (let l of alphabet) {
+      const keyClass = savedState.keyboard?.[l] || '';
+      keyboardKeys[l].className = 'key' + (keyClass ? ' ' + keyClass : '');
+    }
+
+    if (savedState.gameOver) shareBtn.style.display = 'block';
+  } catch (e) {
+    // if parsing fails, remove corrupted state
+    localStorage.removeItem(storageKey);
   }
-
-  if (savedState.gameOver) shareBtn.style.display = 'block';
 }
 
-// Submit guess
+/* ----- GAME LOGIC ----- */
 function submitGuess(guess) {
+  // show guess letters in the current row
   for (let i = 0; i < secretWord.length; i++) {
-    gridCells[currentRow][i].textContent = guess[i];
-    guessWord[i] = guess[i];
+    gridCells[currentRow][i].textContent = guess[i] || '';
+    guessWord[i] = guess[i] || '';
   }
 
-  if (!validWords.includes(guess)) { alert("This is not a valid word!"); return; }
+  // validate word if list is available
+  if (validWords.length && !validWords.includes(guess)) { alert("This is not a valid word!"); return; }
 
+  // evaluate guess
   let secretCounts = {};
   for (let l of secretWord) secretCounts[l] = (secretCounts[l] || 0) + 1;
 
+  // correct letters first
   for (let i = 0; i < secretWord.length; i++) {
     const letter = guess[i];
     if (letter === secretWord[i]) {
@@ -180,6 +186,7 @@ function submitGuess(guess) {
     }
   }
 
+  // present / absent letters
   for (let i = 0; i < secretWord.length; i++) {
     const letter = guess[i];
     if (!gridCells[currentRow][i].classList.contains("correct")) {
@@ -194,6 +201,7 @@ function submitGuess(guess) {
     }
   }
 
+  // win or continue
   if (guess === secretWord) {
     document.getElementById("msg").textContent = "You got it! 🎄";
     document.getElementById("msg").style.fontSize = '32px';
@@ -213,13 +221,16 @@ function submitGuess(guess) {
 }
 
 function revealSecretWord() {
+  // show secret word in the last row
+  const rowToReveal = Math.max(0, currentRow - 1);
   for (let i = 0; i < secretWord.length; i++) {
-    gridCells[currentRow-1][i].textContent = secretWord[i].toUpperCase();
-    gridCells[currentRow-1][i].classList.add("correct");
+    gridCells[rowToReveal][i].textContent = secretWord[i].toUpperCase();
+    gridCells[rowToReveal][i].classList.add("correct");
   }
   shareBtn.style.display = 'block';
 }
 
+/* ----- SHARE BUTTON ----- */
 shareBtn.onclick = () => {
   let shareText = 'I just completed the Christmas Wordle! 🎄\n';
   shareText += secretWord.toUpperCase().split('').map(l => '🟩').join('');
@@ -227,8 +238,10 @@ shareBtn.onclick = () => {
   window.open(whatsappUrl, '_blank');
 };
 
-// Load saved game on page load
-window.onload = loadGameState;
+/* ----- INITIALIZE ----- */
+window.onload = function() {
+  loadGameState();
+};
 </script>
 </body>
 </html>
