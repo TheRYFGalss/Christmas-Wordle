@@ -33,7 +33,7 @@
 <button id="shareBtn">Share to WhatsApp</button>
 
 <script>
-const todayWord = "Priest";
+const todayWord = "Belief";
 const secretWord = todayWord.toLowerCase();
 const maxTries = 6;
 let currentRow = 0;
@@ -109,8 +109,58 @@ guessInput.addEventListener('keydown', (e) => {
   else if (e.key === 'Enter') enterBtn.click();
 });
 
+// Save game state
+function saveGameState(gameOver=false) {
+  const gridState = gridCells.map(row => 
+    row.map(cell => ({
+      letter: cell.textContent,
+      class: cell.className.replace('cell','').trim()
+    }))
+  );
+
+  const keyboardState = {};
+  for (let l of alphabet) {
+    const key = keyboardKeys[l];
+    keyboardState[l] = key.className.replace('key','').trim();
+  }
+
+  const state = {
+    currentRow,
+    currentCol,
+    grid: gridState,
+    keyboard: keyboardState,
+    gameOver
+  };
+  localStorage.setItem('christmasWordle', JSON.stringify(state));
+}
+
+// Load game state
+function loadGameState() {
+  const savedState = JSON.parse(localStorage.getItem('christmasWordle'));
+  if (!savedState) return;
+
+  currentRow = savedState.currentRow;
+  currentCol = savedState.currentCol;
+  gridCells.forEach((row, r) => {
+    row.forEach((cell, c) => {
+      const cellData = savedState.grid[r]?.[c];
+      if (cellData) {
+        cell.textContent = cellData.letter;
+        if (cellData.class) cell.className = "cell " + cellData.class;
+      }
+    });
+  });
+
+  for (let l of alphabet) {
+    const keyClass = savedState.keyboard[l];
+    if (keyClass) keyboardKeys[l].className = 'key ' + keyClass;
+  }
+
+  if (savedState.gameOver) shareBtn.style.display = 'block';
+}
+
+// Submit guess
 function submitGuess(guess) {
-  // Fill grid cells for typed input
   for (let i = 0; i < secretWord.length; i++) {
     gridCells[currentRow][i].textContent = guess[i];
     guessWord[i] = guess[i];
@@ -148,11 +198,17 @@ function submitGuess(guess) {
     document.getElementById("msg").textContent = "You got it! 🎄";
     document.getElementById("msg").style.fontSize = '32px';
     shareBtn.style.display = 'block';
+    saveGameState(true);
   } else {
     currentRow++;
     currentCol = 0;
     guessWord = Array(secretWord.length).fill('');
-    if (currentRow === maxTries) revealSecretWord();
+    if (currentRow === maxTries) {
+      revealSecretWord();
+      saveGameState(true);
+    } else {
+      saveGameState();
+    }
   }
 }
 
@@ -170,6 +226,9 @@ shareBtn.onclick = () => {
   const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
   window.open(whatsappUrl, '_blank');
 };
+
+// Load saved game on page load
+window.onload = loadGameState;
 </script>
 </body>
 </html>
