@@ -13,7 +13,7 @@
   .absent { background: #787c7e; color: white; }
   #msg { margin-top: 15px; font-size: 24px; font-weight: bold; text-align: center; }
   #keyboard { display: grid; grid-template-columns: repeat(10, 30px); gap: 5px; justify-content: center; margin-top: 20px; }
-  .key { width: 30px; height: 40px; border: 1px solid #aaa; display: flex; justify-content: center; align-items: center; cursor: pointer; font-weight: bold; text-transform: uppercase; user-select: none; }
+  .key { width: 30px; height: 40px; border: 1px solid #aaa; display: flex; justify-content: center; align-items: center; font-weight: bold; text-transform: uppercase; user-select: none; }
   #controls { margin-top: 20px; display: flex; align-items: center; gap: 10px; }
   #guessInput { width: 240px; height: 40px; font-size: 20px; text-transform: uppercase; text-align: center; }
   #enterBtn { padding: 5px 15px; font-size:16px; cursor:pointer; }
@@ -21,22 +21,25 @@
 </style>
 </head>
 <body>
+
 <h2>Christmas Wordle</h2>
 
 <div id="grid"></div>
 <div id="msg"></div>
 <div id="keyboard"></div>
+
 <div id="controls">
-  <input id="guessInput" type="text" maxlength="6" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Enter guess" />
+  <input id="guessInput" type="text" maxlength="6" autocomplete="off" spellcheck="false" placeholder="Enter guess" />
   <button id="enterBtn">Send</button>
 </div>
+
 <button id="shareBtn">Share to WhatsApp</button>
 
 <script>
 /* ----- CONFIG ----- */
-const todayWord = "Praise"; // <-- change this to start a new game
+const todayWord = "Submit";
 const secretWord = todayWord.toLowerCase();
-const storageKey = 'christmasWordle'; // localStorage key
+const storageKey = 'christmasWordle';
 
 /* ----- GAME STATE ----- */
 const maxTries = 6;
@@ -45,203 +48,154 @@ let currentCol = 0;
 const alphabet = "abcdefghijklmnopqrstuvwxyz";
 const keyboardKeys = {};
 let gridCells = [];
-let guessWord = Array(secretWord.length).fill('');
 
-/* ----- WORD LIST (for validation) ----- */
+/* ----- GOOGLE FORM (ADDED) ----- */
+function openGoogleForm(guessesTaken) {
+  const today = new Date().toLocaleDateString('en-GB');
+
+  const formUrl =
+    "https://docs.google.com/forms/d/e/1FAIpQLSfNRz2jyh2cF2JVekpubNRMUTcy9NLbVq8iQweCZhIPQO0zbg/viewform?" +
+    "entry.956176593=" +
+    "&entry.1964866438=" + guessesTaken +
+    "&entry.407786013=" + today;
+
+  window.open(formUrl, "_blank");
+}
+
+/* ----- WORD LIST ----- */
 let validWords = [];
 fetch('https://raw.githubusercontent.com/dwyl/english-words/master/words_dictionary.json')
-  .then(response => response.json())
-  .then(data => { validWords = Object.keys(data); })
-  .catch(() => { validWords = []; }); // fallback if fetch fails
+  .then(r => r.json())
+  .then(d => validWords = Object.keys(d))
+  .catch(() => validWords = []);
 
 /* ----- BUILD GRID ----- */
 const grid = document.getElementById("grid");
 grid.style.gridTemplateColumns = `repeat(${secretWord.length}, 40px)`;
+
 for (let r = 0; r < maxTries; r++) {
-  let rowCells = [];
+  let row = [];
   for (let c = 0; c < secretWord.length; c++) {
-    let cell = document.createElement("div");
+    const cell = document.createElement("div");
     cell.className = "cell";
-    cell.id = `cell-${r}-${c}`;
     grid.appendChild(cell);
-    rowCells.push(cell);
+    row.push(cell);
   }
-  gridCells.push(rowCells);
+  gridCells.push(row);
 }
 
-/* ----- KEYBOARD (visual) ----- */
+/* ----- KEYBOARD (VISUAL ONLY) ----- */
 const keyboardDiv = document.getElementById("keyboard");
-for (let letter of alphabet) {
+for (let l of alphabet) {
   const key = document.createElement("div");
   key.className = "key";
-  key.id = `key-${letter}`;
-  key.textContent = letter;
+  key.textContent = l;
   keyboardDiv.appendChild(key);
-  keyboardKeys[letter] = key;
-  // intentionally no click handler: visual-only keyboard
+  keyboardKeys[l] = key;
 }
 
-/* ----- DOM REFS ----- */
-const guessInput = document.getElementById('guessInput');
-const enterBtn = document.getElementById('enterBtn');
+/* ----- INPUT ----- */
+const guessInput = document.getElementById("guessInput");
+const enterBtn = document.getElementById("enterBtn");
 const shareBtn = document.getElementById("shareBtn");
 
-/* ----- INPUT HANDLERS ----- */
-enterBtn.addEventListener('click', () => {
+enterBtn.onclick = () => {
   const guess = guessInput.value.trim().toLowerCase();
-  if (guess.length !== secretWord.length) { alert('Word must be ' + secretWord.length + ' letters'); return; }
-  guessInput.value = '';
+  if (guess.length !== secretWord.length) return alert("Invalid length");
+  if (validWords.length && !validWords.includes(guess)) return alert("Not a valid word");
+  guessInput.value = "";
   submitGuess(guess);
+};
+
+guessInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") enterBtn.click();
 });
 
-guessInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') enterBtn.click();
-});
-
-/* ----- SAVE / LOAD STATE ----- */
+/* ----- SAVE / LOAD ----- */
 function saveGameState(gameOver=false) {
-  const gridState = gridCells.map(row =>
-    row.map(cell => ({
-      letter: cell.textContent || '',
-      class: cell.className.replace('cell','').trim()
-    }))
-  );
-
-  const keyboardState = {};
-  for (let l of alphabet) keyboardState[l] = keyboardKeys[l].className.replace('key','').trim();
-
-  const state = {
-    secret: secretWord, // remember which secret this state belongs to
+  localStorage.setItem(storageKey, JSON.stringify({
+    secret: secretWord,
     currentRow,
-    currentCol,
-    grid: gridState,
-    keyboard: keyboardState,
+    grid: gridCells.map(r => r.map(c => ({
+      t: c.textContent,
+      cl: c.className
+    }))),
+    keyboard: Object.fromEntries(
+      Object.entries(keyboardKeys).map(([k,v]) => [k, v.className])
+    ),
     gameOver
-  };
-  try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch (e) { /* ignore storage errors */ }
+  }));
 }
 
 function loadGameState() {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return;
-    const savedState = JSON.parse(raw);
+  const raw = localStorage.getItem(storageKey);
+  if (!raw) return;
+  const s = JSON.parse(raw);
+  if (s.secret !== secretWord) return localStorage.removeItem(storageKey);
 
-    // If the saved state is for a different secret (word changed), discard it.
-    if (!savedState || savedState.secret !== secretWord) {
-      localStorage.removeItem(storageKey);
-      return;
-    }
-
-    // restore indices
-    currentRow = typeof savedState.currentRow === 'number' ? savedState.currentRow : 0;
-    currentCol = typeof savedState.currentCol === 'number' ? savedState.currentCol : 0;
-
-    // restore grid
-    gridCells.forEach((row, r) => {
-      row.forEach((cell, c) => {
-        const cellData = savedState.grid?.[r]?.[c];
-        if (cellData) {
-          cell.textContent = cellData.letter || '';
-          cell.className = "cell" + (cellData.class ? ' ' + cellData.class : '');
-        }
-      });
-    });
-
-    // restore keyboard classes
-    for (let l of alphabet) {
-      const keyClass = savedState.keyboard?.[l] || '';
-      keyboardKeys[l].className = 'key' + (keyClass ? ' ' + keyClass : '');
-    }
-
-    if (savedState.gameOver) shareBtn.style.display = 'block';
-  } catch (e) {
-    // if parsing fails, remove corrupted state
-    localStorage.removeItem(storageKey);
-  }
+  currentRow = s.currentRow;
+  s.grid.forEach((r,i)=>r.forEach((c,j)=>{
+    gridCells[i][j].textContent = c.t;
+    gridCells[i][j].className = c.cl;
+  }));
+  Object.entries(s.keyboard).forEach(([k,v])=>keyboardKeys[k].className=v);
+  if (s.gameOver) shareBtn.style.display="block";
 }
 
 /* ----- GAME LOGIC ----- */
 function submitGuess(guess) {
-  // show guess letters in the current row
-  for (let i = 0; i < secretWord.length; i++) {
-    gridCells[currentRow][i].textContent = guess[i] || '';
-    guessWord[i] = guess[i] || '';
-  }
+  const counts = {};
+  for (let l of secretWord) counts[l] = (counts[l]||0)+1;
 
-  // validate word if list is available
-  if (validWords.length && !validWords.includes(guess)) { alert("This is not a valid word!"); return; }
-
-  // evaluate guess
-  let secretCounts = {};
-  for (let l of secretWord) secretCounts[l] = (secretCounts[l] || 0) + 1;
-
-  // correct letters first
-  for (let i = 0; i < secretWord.length; i++) {
-    const letter = guess[i];
-    if (letter === secretWord[i]) {
-      gridCells[currentRow][i].classList.add("correct");
-      keyboardKeys[letter].className = "key correct";
-      secretCounts[letter]--;
+  for (let i=0;i<secretWord.length;i++) {
+    const cell = gridCells[currentRow][i];
+    cell.textContent = guess[i];
+    if (guess[i] === secretWord[i]) {
+      cell.classList.add("correct");
+      keyboardKeys[guess[i]].className="key correct";
+      counts[guess[i]]--;
     }
   }
 
-  // present / absent letters
-  for (let i = 0; i < secretWord.length; i++) {
-    const letter = guess[i];
-    if (!gridCells[currentRow][i].classList.contains("correct")) {
-      if (secretCounts[letter] > 0) {
-        gridCells[currentRow][i].classList.add("present");
-        if (!keyboardKeys[letter].classList.contains("correct")) keyboardKeys[letter].className = "key present";
-        secretCounts[letter]--;
+  for (let i=0;i<secretWord.length;i++) {
+    const cell = gridCells[currentRow][i];
+    if (!cell.classList.contains("correct")) {
+      const l = guess[i];
+      if (counts[l]>0) {
+        cell.classList.add("present");
+        if (!keyboardKeys[l].classList.contains("correct"))
+          keyboardKeys[l].className="key present";
+        counts[l]--;
       } else {
-        gridCells[currentRow][i].classList.add("absent");
-        if (!keyboardKeys[letter].classList.contains("correct") && !keyboardKeys[letter].classList.contains("present")) keyboardKeys[letter].className = "key absent";
+        cell.classList.add("absent");
+        keyboardKeys[l].className="key absent";
       }
     }
   }
 
-  // win or continue
   if (guess === secretWord) {
     document.getElementById("msg").textContent = "You got it! 🎄";
-    document.getElementById("msg").style.fontSize = '32px';
-    shareBtn.style.display = 'block';
+    shareBtn.style.display="block";
     saveGameState(true);
+    openGoogleForm(currentRow + 1);   // ✅ WIN
   } else {
     currentRow++;
-    currentCol = 0;
-    guessWord = Array(secretWord.length).fill('');
     if (currentRow === maxTries) {
-      revealSecretWord();
       saveGameState(true);
+      openGoogleForm("X");            // ❌ FAIL
     } else {
       saveGameState();
     }
   }
 }
 
-function revealSecretWord() {
-  // show secret word in the last row
-  const rowToReveal = Math.max(0, currentRow - 1);
-  for (let i = 0; i < secretWord.length; i++) {
-    gridCells[rowToReveal][i].textContent = secretWord[i].toUpperCase();
-    gridCells[rowToReveal][i].classList.add("correct");
-  }
-  shareBtn.style.display = 'block';
-}
-
-/* ----- SHARE BUTTON ----- */
+/* ----- SHARE ----- */
 shareBtn.onclick = () => {
-  let shareText = 'I just completed the Christmas Wordle! 🎄\n';
-  shareText += secretWord.toUpperCase().split('').map(l => '🟩').join('');
-  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
-  window.open(whatsappUrl, '_blank');
+  const txt = "I just completed the Christmas Wordle! 🎄";
+  window.open(`https://wa.me/?text=${encodeURIComponent(txt)}`);
 };
 
-/* ----- INITIALIZE ----- */
-window.onload = function() {
-  loadGameState();
-};
+window.onload = loadGameState;
 </script>
 </body>
 </html>
