@@ -37,7 +37,7 @@
 
 <script>
 /* ----- CONFIG ----- */
-const todayWord = "Submit";
+const todayWord = "submit";
 const secretWord = todayWord.toLowerCase();
 const storageKey = 'christmasWordle';
 
@@ -49,7 +49,7 @@ const alphabet = "abcdefghijklmnopqrstuvwxyz";
 const keyboardKeys = {};
 let gridCells = [];
 
-/* ----- GOOGLE FORM (ADDED) ----- */
+/* ----- GOOGLE FORM ----- */
 function openGoogleForm(guessesTaken) {
   const today = new Date().toLocaleDateString('en-GB');
 
@@ -177,12 +177,24 @@ function submitGuess(guess) {
     document.getElementById("msg").textContent = "You got it! 🎄";
     shareBtn.style.display="block";
     saveGameState(true);
-    openGoogleForm(currentRow + 1);   // ✅ WIN
+
+    /* ---- ONLY CHANGE: delayed redirect ---- */
+    setTimeout(() => {
+      openGoogleForm(currentRow + 1);
+    }, 1000);
+    /* -------------------------------------- */
+
   } else {
     currentRow++;
     if (currentRow === maxTries) {
       saveGameState(true);
-      openGoogleForm("X");            // ❌ FAIL
+
+      /* ---- ONLY CHANGE: delayed redirect ---- */
+      setTimeout(() => {
+        openGoogleForm("X");
+      }, 1000);
+      /* -------------------------------------- */
+
     } else {
       saveGameState();
     }
