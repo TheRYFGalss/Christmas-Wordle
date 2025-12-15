@@ -59,7 +59,8 @@ function openGoogleForm(guessesTaken) {
     "&entry.1964866438=" + guessesTaken +
     "&entry.407786013=" + today;
 
-  window.open(formUrl, "_blank");
+  /* SAFARI FIX */
+  window.location.href = formUrl;
 }
 
 /* ----- WORD LIST ----- */
@@ -178,23 +179,13 @@ function submitGuess(guess) {
     shareBtn.style.display="block";
     saveGameState(true);
 
-    /* ---- ONLY CHANGE: delayed redirect ---- */
-    setTimeout(() => {
-      openGoogleForm(currentRow + 1);
-    }, 1000);
-    /* -------------------------------------- */
+    openGoogleForm(currentRow + 1);
 
   } else {
     currentRow++;
     if (currentRow === maxTries) {
       saveGameState(true);
-
-      /* ---- ONLY CHANGE: delayed redirect ---- */
-      setTimeout(() => {
-        openGoogleForm("X");
-      }, 1000);
-      /* -------------------------------------- */
-
+      openGoogleForm("X");
     } else {
       saveGameState();
     }
